@@ -1,5 +1,6 @@
 const request = require("request").defaults({jar: true});
 const fs = require("fs");
+const program = require("commander");
 
 function buildUrl(kanji) {
     return `https://kanji.koohii.com/study/kanji/${kanji}`;
@@ -26,16 +27,19 @@ function login(username, password) {
     })
 }
 
-function ensureDirExists(dir) {
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir);
+function ensureDirectoryExists(directory) {
+    if (!fs.existsSync(directory)) {
+        fs.mkdirSync(directory);
     }
 
-    return dir + "/";
+    return directory + "/";
 }
 
-function* kanjiList() {
-    for (let codepoint = 0x4e00; codepoint <= 0x9faf; codepoint++) {
+function* kanjiList(range) {
+    const lower = range[0];
+    const upper = range[1];
+    
+    for (let codepoint = lower; codepoint <= upper; codepoint++) {
         yield String.fromCodePoint(codepoint);
     }
 }
@@ -62,8 +66,8 @@ function downloadPage(url) {
     });
 }
 
-function savePage(dir, kanji, page) {
-    const file = `${dir}u${kanji.codePointAt(0).toString(16)}.html`;
+function savePage(directory, kanji, page) {
+    const file = `${directory}u${kanji.codePointAt(0).toString(16)}.html`;
 
     fs.writeFileSync(file, page);
     console.log(`saved page to file ${file}`);
@@ -77,12 +81,20 @@ function waitMs(ms) {
 
 async function main() {
     try {
-        const dir = ensureDirExists("pages");
+        program
+            .version("0.1.0")
+            .option("-u, --username [username]", "Koohii username")
+            .option("-p, --password [password]", "Koohii password")
+            .option("-d, --directory [directory]", "Download directory", "pages")
+            .option("-r, --range <a>..<b>", "kanji range (Unicode points)", val => val.split("..").map(parseInt), [0x4e00, 0x9faf])
+            .parse(process.argv);
 
-        await login("alvicala", "darkcloud");
+        const directory = ensureDirectoryExists(program.directory);
 
-        for (let kanji of kanjiList()) {
-            savePage(dir, kanji, await downloadPage(buildUrl(kanji)));
+        await login(program.username, program.password);
+
+        for (let kanji of kanjiList(program.range)) {
+            savePage(directory, kanji, await downloadPage(buildUrl(kanji)));
             await waitMs(1000);
         }
     } catch(error) {
