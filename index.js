@@ -1,6 +1,7 @@
 const request = require("request").defaults({jar: true});
 const fs = require("fs");
 const program = require("commander");
+const kanjiRange = [0x4e00, 0x9faf];
 
 function login(username, password) {
     return new Promise((resolve, reject) => {
@@ -13,11 +14,9 @@ function login(username, password) {
             }
         }, (error, response, body) => {
             if (error) {
-                console.error(`error logging as ${username}`, error);
-                reject(error);
+                reject(`error logging as ${username}`);
             } else if (response.statusCode !== 302) {
-                console.error(`invalid username or password`);
-                reject(response);
+                reject(`invalid username or password`);
             } else {
                 console.log(`logged in as ${username}`);
                 resolve(response);
@@ -52,15 +51,12 @@ function downloadPage(kanji) {
         const url = `https://kanji.koohii.com/study/kanji/${kanji}`;
 
         request(encodeURI(url), (error, response, body) => {
-            console.log(`downloaded ${url}`);
-
             if (error) {
-                console.error("error downloading page", error);
-                reject(error);
+                reject(`error downloading ${url}`);
             } else if (!isValidPage(body)) {
-                console.error("downloaded page, but not logged in", body);
-                reject(body);
+                reject(`downloaded ${url}, but not logged in`);
             } else {
+                console.log(`downloaded ${url}`);
                 resolve(body);
             }
         });
@@ -71,13 +67,32 @@ function savePage(directory, kanji, page) {
     const file = `${directory}u${kanji.codePointAt(0).toString(16)}.html`;
 
     fs.writeFileSync(file, page);
-    console.log(`saved page to file ${file}`);
+    console.log(`saved ${file}`);
 
     return file;
 }
 
 function waitMs(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function coerceKanjiRange(value, defaultRange) {
+    const range = value.split("..").map(token => {
+        const codepoint = parseInt(token);
+        return isNaN(codepoint) ? token.codePointAt(0) : codepoint;
+    });
+
+    if (range.length === 1) {
+        range[1] = range[0];
+    } else {
+        for (let i of [0, 1]) {
+            if (isNaN(range[i])) {
+                range[i] = kanjiRange[i];
+            }
+        }
+    }
+
+    return range;
 }
 
 function initProgram() {
@@ -87,7 +102,7 @@ function initProgram() {
         .option("-p, --password [password]", "Koohii password")
         .option("-d, --directory [directory]", "download directory", "pages")
         .option("-w, --wait <ms>", "ms to wait between downloads", parseInt, 1000)
-        .option("-r, --range <a>..<b>", "kanji range (Unicode points)", val => val.split("..").map(parseInt), [0x4e00, 0x9faf])
+        .option("-r, --range <a>..<b>", "kanji range (Unicode points)", coerceKanjiRange, kanjiRange)
         .parse(process.argv);
 };
 
@@ -104,7 +119,7 @@ async function main() {
             await waitMs(program.wait);
         }
     } catch(error) {
-        console.error("terminated due to fatal error");
+        console.error(error);
     }
 }
 
