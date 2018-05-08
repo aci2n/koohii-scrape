@@ -1,0 +1,19 @@
+{
+  "name": "koohii-scrape",
+  "version": "1.0.0",
+  "description": "Scrapes Koohii.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "scrape",
+    "kanji",
+    "koohii"
+  ],
+  "author": "i2n",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "request": "^2.85.0"
+  }
+}
