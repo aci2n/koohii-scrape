@@ -100,7 +100,7 @@ function initProgram() {
         .version("0.1.0")
         .option("-u, --username [username]", "Koohii username")
         .option("-p, --password [password]", "Koohii password")
-        .option("-d, --directory [directory]", "download directory", "pages")
+        .option("-o, --output [directory]", "download directory", "../koohii-pages")
         .option("-w, --wait <ms>", "ms to wait between downloads", parseInt, 1000)
         .option("-r, --range <a>..<b>", "kanji range (Unicode points)", coerceKanjiRange, kanjiRange)
         .parse(process.argv);
@@ -110,7 +110,7 @@ async function main() {
     initProgram();
 
     try {
-        const directory = ensureDirectoryExists(program.directory);
+        const directory = ensureDirectoryExists(program.output);
 
         await login(program.username, program.password);
 
