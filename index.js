@@ -137,11 +137,24 @@ function initProgram() {
         .option("-w, --wait <ms>", "ms to wait between downloads", parseInt, 1000)
         .option("-r, --range <a>..<b>", "kanji range (Unicode points)", coerceKanjiRange)
         .parse(process.argv);
-};
+}
 
-async function main() {
-    initProgram();
+async function retry(callback, times) {
+    while (times-- > 0) {
+        if (await callback()) {
+            console.log(`finished execution with ${times} retry attempts remaining`);
+            return;
+        }
+        
+        console.log(`retrying execution, ${times} retry attempts remaining`);
+    }
+    
+    console.log(`maximum retry attempts reached, aborting`);
+}
 
+async function startDownloading() {
+    let success = false;
+    
     try {
         const directory = ensureDirectoryExists(program.output);
         await login(program.username, program.password);
@@ -150,9 +163,18 @@ async function main() {
             savePage(directory, kanji, await downloadPage(kanji));
             await waitMs(program.wait);
         }
+        
+        success = true;
     } catch(error) {
         console.error(error);
     }
+    
+    return success;
+}
+
+function main() {
+    initProgram();
+    retry(startDownloading, 5);
 }
 
 main();
