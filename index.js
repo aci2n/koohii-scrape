@@ -33,15 +33,6 @@ function ensureDirectoryExists(directory) {
     return directory + "/";
 }
 
-function* kanjiList(range) {
-    const lower = range[0];
-    const upper = range[1];
-    
-    for (let codepoint = lower; codepoint <= upper; codepoint++) {
-        yield String.fromCodePoint(codepoint);
-    }
-}
-
 function isValidPage(page) {
     return page.indexOf("EditStoryComponent") !== -1;
 }
@@ -64,7 +55,7 @@ function downloadPage(kanji) {
 }
 
 function savePage(directory, kanji, page) {
-    const file = `${directory}u${kanji.codePointAt(0).toString(16)}.html`;
+    const file = `${directory}${kanji.codePointAt(0)}.html`;
 
     fs.writeFileSync(file, page);
     console.log(`saved ${file}`);
@@ -76,11 +67,31 @@ function waitMs(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function kanjiListByRange(lower, upper) {
+    const list = [];
+    
+    for (let codepoint = lower; codepoint < upper; codepoint++) {
+        list.push(codepoint);
+    }
+
+    return list;
+}
+
+function coerceCodepoint(value) {
+    const codepoint = parseInt(value);
+    return isNaN(codepoint) ? value.codePointAt(0) : codepoint;
+}
+
+function splitAndCoerceCodepoints(value, separator) {
+    return value.split(separator).map(token => coerceCodepoint(token));
+}
+
 function coerceKanjiRange(value, defaultRange) {
-    const range = value.split("..").map(token => {
-        const codepoint = parseInt(token);
-        return isNaN(codepoint) ? token.codePointAt(0) : codepoint;
-    });
+    if (value.indexOf(",") !== -1) {
+        return splitAndCoerceCodepoints(value, ",");
+    }
+    
+    const range = splitAndCoerceCodepoints(value, "..");
 
     if (range.length === 1) {
         range[1] = range[0];
@@ -91,8 +102,30 @@ function coerceKanjiRange(value, defaultRange) {
             }
         }
     }
+    
+    return kanjiListByRange(range[0], range[1]);
+}
 
-    return range;
+function defaultKanjiList(directory) {
+    const files = fs.readdirSync(directory);
+    files.sort();
+    const lastFile = files[files.length - 1];
+    
+    if (lastFile) {
+        const lastCodepoint = parseInt(lastFile.match(/\d+/));
+        
+        if (!isNaN(lastCodepoint)) {
+            return kanjiListByRange(lastCodepoint + 1, kanjiRange[1]);
+        }
+    }
+    
+    return kanjiListByRange(kanjiRange[0], kanjiRange[1]);
+}
+
+function* kanjiGenerator(codepoints) {
+    for (let codepoint of codepoints) {
+        yield String.fromCodePoint(codepoint);
+    }
 }
 
 function initProgram() {
@@ -102,7 +135,7 @@ function initProgram() {
         .option("-p, --password [password]", "Koohii password")
         .option("-o, --output [directory]", "download directory", "../koohii-pages")
         .option("-w, --wait <ms>", "ms to wait between downloads", parseInt, 1000)
-        .option("-r, --range <a>..<b>", "kanji range (Unicode points)", coerceKanjiRange, kanjiRange)
+        .option("-r, --range <a>..<b>", "kanji range (Unicode points)", coerceKanjiRange)
         .parse(process.argv);
 };
 
@@ -111,10 +144,9 @@ async function main() {
 
     try {
         const directory = ensureDirectoryExists(program.output);
-
         await login(program.username, program.password);
 
-        for (let kanji of kanjiList(program.range)) {
+        for (let kanji of kanjiGenerator(program.range || defaultKanjiList(directory))) {
             savePage(directory, kanji, await downloadPage(kanji));
             await waitMs(program.wait);
         }
