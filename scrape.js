@@ -1,7 +1,7 @@
 const request = require("request").defaults({jar: true});
 const fs = require("fs");
 const program = require("commander");
-const kanjiRange = [0x4e00, 0x9faf];
+const kanjiRange = require("./kanji-range").range;
 
 function login(username, password) {
     return new Promise((resolve, reject) => {

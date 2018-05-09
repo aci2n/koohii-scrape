@@ -1,0 +1,1 @@
+exports.range = [0x4e00, 0x9faf];
