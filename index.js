@@ -67,14 +67,26 @@ function waitMs(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function kanjiListByRange(lower, upper) {
-    const list = [];
-    
-    for (let codepoint = lower; codepoint < upper; codepoint++) {
-        list.push(codepoint);
+function codepointGeneratorByList(codepoints) {
+    return function*() {
+        for (let codepoint of codepoints) {
+            yield codepoint;
+        }
     }
+}
 
-    return list;
+function codepointGeneratorByRange(lower, upper) {
+    return function*() {    
+        for (let codepoint = lower; codepoint <= upper; codepoint++) {
+            yield codepoint;
+        }
+    }
+}
+
+function* kanjiGenerator(codepointsGenerator) {
+    for (let codepoint of codepointsGenerator()) {
+        yield String.fromCodePoint(codepoint);
+    }
 }
 
 function coerceCodepoint(value) {
@@ -83,12 +95,12 @@ function coerceCodepoint(value) {
 }
 
 function splitAndCoerceCodepoints(value, separator) {
-    return value.split(separator).map(token => coerceCodepoint(token));
+    return value.split(separator).map(token => coerceCodepoint(token.trim()));
 }
 
-function coerceKanjiRange(value, defaultRange) {
+function coerceCodepointsGenerator(value) {
     if (value.indexOf(",") !== -1) {
-        return splitAndCoerceCodepoints(value, ",");
+        return codepointGeneratorByList(splitAndCoerceCodepoints(value, ","));
     }
     
     const range = splitAndCoerceCodepoints(value, "..");
@@ -103,11 +115,13 @@ function coerceKanjiRange(value, defaultRange) {
         }
     }
     
-    return kanjiListByRange(range[0], range[1]);
+    return codepointGeneratorByRange(...range);
 }
 
-function defaultKanjiList(directory) {
+function defaultCodepointsGenerator(directory) {
+    let range = kanjiRange;
     const files = fs.readdirSync(directory);
+    
     files.sort();
     const lastFile = files[files.length - 1];
     
@@ -115,17 +129,11 @@ function defaultKanjiList(directory) {
         const lastCodepoint = parseInt(lastFile.match(/\d+/));
         
         if (!isNaN(lastCodepoint)) {
-            return kanjiListByRange(lastCodepoint + 1, kanjiRange[1]);
+            range[0] = lastCodepoint + 1;
         }
     }
     
-    return kanjiListByRange(kanjiRange[0], kanjiRange[1]);
-}
-
-function* kanjiGenerator(codepoints) {
-    for (let codepoint of codepoints) {
-        yield String.fromCodePoint(codepoint);
-    }
+    return codepointGeneratorByRange(...range);
 }
 
 function initProgram() {
@@ -135,7 +143,7 @@ function initProgram() {
         .option("-p, --password [password]", "Koohii password")
         .option("-o, --output [directory]", "download directory", "../koohii-pages")
         .option("-w, --wait <ms>", "ms to wait between downloads", parseInt, 1000)
-        .option("-r, --range <a>..<b>", "kanji range (Unicode points)", coerceKanjiRange)
+        .option("-r, --range <a>..<b>", "kanji range (Unicode points)", coerceCodepointsGenerator)
         .parse(process.argv);
 }
 
@@ -143,13 +151,14 @@ async function retry(callback, times) {
     while (times-- > 0) {
         if (await callback()) {
             console.log(`finished execution with ${times} retry attempts remaining`);
-            return;
+            return true;
         }
         
         console.log(`retrying execution, ${times} retry attempts remaining`);
     }
     
     console.log(`maximum retry attempts reached, aborting`);
+    return false;
 }
 
 async function startDownloading() {
@@ -159,7 +168,7 @@ async function startDownloading() {
         const directory = ensureDirectoryExists(program.output);
         await login(program.username, program.password);
 
-        for (let kanji of kanjiGenerator(program.range || defaultKanjiList(directory))) {
+        for (let kanji of kanjiGenerator(program.range || defaultCodepointsGenerator(directory))) {
             savePage(directory, kanji, await downloadPage(kanji));
             await waitMs(program.wait);
         }
